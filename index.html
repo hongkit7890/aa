@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>掌上生態瓶 - 模擬遊戲</title>
+    <!-- 引入Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 自訂字體 */
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            /* 避免滑塊等操作選取到文字 */
+            user-select: none;
+        }
+
+        /* 遊戲元素的簡單動畫 */
+        .fish {
+            transition: all 2s ease-in-out;
+            transform: scaleX(1); /* 初始方向 */
+        }
+        
+        /* 氣泡動畫 */
+        @keyframes rise {
+            0% {
+                bottom: 10px;
+                opacity: 1;
+                transform: scale(0.5);
+            }
+            100% {
+                bottom: 95%;
+                opacity: 0;
+                transform: scale(1.2);
+            }
+        }
+        .bubble {
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            animation: rise 3s infinite ease-in;
+            width: 10px;
+            height: 10px;
+            z-index: 5; /* (新增) 確保氣泡在裝飾物之上 */
+        }
+
+        /* 進度條動畫 */
+        .progress-bar-fill {
+            transition: width 0.5s ease-out, background-color 0.5s ease-out;
+        }
+
+        /* 訊息彈窗 */
+        #message-box {
+            transition: opacity 0.5s, transform 0.5s;
+        }
+
+        /* 讓按鈕在禁用時有更明顯的樣式 */
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background-color: #9ca3af; /* Tailwind gray-400 */
+        }
+
+        /* 緊急換水按鈕在啟用時的樣式 */
+        #emergency-water-change-btn:not(:disabled) {
+             background-color: #dc2626; /* Tailwind red-600 */
+        }
+        #emergency-water-change-btn:not(:disabled):hover {
+             background-color: #b91c1c; /* Tailwind red-700 */
+        }
+    </style>
+</head>
+<body class="bg-gray-200 flex items-center justify-center min-h-screen p-4">
+
+    <!-- 測驗彈窗 (Quiz Modal) -->
+    <div id="quiz-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 class="text-xl font-bold mb-4" id="quiz-title">生態問題</h3>
+            <p class="text-gray-700 mb-6" id="quiz-question">這是一個問題嗎？</p>
+            <div class="space-y-3">
+                <button id="quiz-ans-1" data-answer="1" class="quiz-option w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 transition">選項 1</button>
+                <button id="quiz-ans-2" data-answer="2" class="quiz-option w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 transition">選項 2</button>
+            </div>
+            <button id="quiz-cancel" class="w-full text-center text-gray-600 mt-4 hover:text-gray-800">取消</button>
+        </div>
+    </div>
+
+    <!-- (新增) 遊戲結束 - 成績版面 -->
+    <div id="score-modal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6 text-center">
+            <h2 class="text-3xl font-bold text-blue-800 mb-4">遊戲結束</h2>
+            <p class="text-gray-700 text-lg mb-2">你的生態瓶存活了：</p>
+            <p id="score-day" class="text-5xl font-extrabold text-gray-900 mb-6">10 天</p>
+            
+            <p class="text-gray-700 text-lg mb-3">你獲得了稱號：</p>
+            <p id="score-title" class="text-2xl font-bold text-purple-600 mb-8">Lv.3 水域守護者</p>
+
+            <button id="score-close-btn" class="w-full bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 transition">
+                查看水缸
+            </button>
+        </div>
+    </div>
+
+    <div class="game-container w-full max-w-6xl bg-white shadow-2xl rounded-2xl overflow-hidden">
+        
+        <!-- 遊戲標題 -->
+        <header class="bg-blue-800 text-white p-4 text-center">
+            <h1 class="text-2xl font-bold">掌上生態瓶 🐠🦪🌿</h1>
+            <p id="game-day" class="text-sm opacity-90">第 1 天</p>
+        </header>
+
+        <!-- 訊息彈窗 -->
+        <div id="message-box" class="absolute top-20 left-1/2 -translate-x-1/2 bg-yellow-400 text-gray-900 px-6 py-3 rounded-lg shadow-lg opacity-0 transform -translate-y-10 z-50">
+            <span id="message-text">這是一條訊息</span>
+        </div>
+
+        <!-- 佈局容器 -->
+        <div class="flex flex-col lg:flex-row">
+
+            <!-- 左側欄 (水缸 + 儀表板) -->
+            <div class="w-full lg:w-2/3">
+                <!-- 水缸 (Aquarium) -->
+                <main class="w-full bg-blue-100 p-4 relative" style="height: 500px;">
+                    <!-- 水缸背景 -->
+                    <div class="aquarium-bg absolute inset-0 bg-gradient-to-b from-blue-300 to-blue-400 overflow-hidden rounded-lg">
+                        <!-- 水的濁度 (藻類) -->
+                        <div id="water-turbidity" class="absolute inset-0 bg-green-800 transition-opacity duration-1000" style="opacity: 0.1;"></div>
+
+                        <!-- (新增) 底沙 -->
+                        <div class="absolute bottom-0 left-0 w-full h-8" style="background-color: #f7e7c1; z-index: 0;"></div>
+
+                        <!-- (新增) 裝飾岩石 -->
+                        <span class="absolute text-5xl" style="bottom: 10px; left: 15%; z-index: 1;">🪨</span>
+                        <span class="absolute text-3xl" style="bottom: 5px; left: 22%; z-index: 1;">🪨</span>
+
+                        <!-- 生物：羅非魚 -->
+                        <span id="fish" class="fish absolute text-7xl cursor-pointer" style="top: 40%; left: 50%; z-index: 10;">🐠</span> <!-- (修改) z-index -->
+                        <span id="fish-2" class="fish absolute text-7xl cursor-pointer" style="top: 60%; left: 30%; z-index: 10;">🐠</span> <!-- (修改) z-index -->
+
+                        <!-- 生物：三角帆蚌 -->
+                        <span id="mussel" class="absolute text-6xl" style="bottom: 20px; left: 35%; z-index: 10;">🦪</span> <!-- (修改) z-index & left -->
+                        <span id="mussel-2" class="absolute text-6xl" style="bottom: 20px; left: 45%; z-index: 10;">🦪</span> <!-- (修改) z-index & left -->
+
+                        <!-- 生物：水草 -->
+                        <div id="plant-container" class="absolute bottom-0 left-0 w-full h-24" style="z-index: 10;"> <!-- (修改) z-index -->
+                            <!-- JS 會在這裡添加水草 -->
+                            <span class="absolute text-6xl" style="bottom: 10px; left: 70%;">🌿</span> <!-- (修改) text-4xl -> text-6xl -->
+                            <span class="absolute text-6xl" style="bottom: 10px; left: 80%;">🌿</span> <!-- (修改) text-5xl -> text-6xl -->
+                        </div>
+
+                        <!-- 氣泡 -->
+                        <div id="bubble-container"></div>
+
+                    </div>
+                </main>
+
+                <!-- 儀表板 (水缸下方) -->
+                <section class="bg-gray-50 p-6 grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-gray-200">
+                    <!-- 1. 生態儀表板 -->
+                    <div>
+                        <h2 class="text-xl font-bold mb-4 border-b pb-2">生態儀表板</h2>
+                        <!-- 環境狀態 -->
+                        <div class="space-y-3">
+                            <!-- 溶氧量 -->
+                            <div class="gauge">
+                                <label class="text-sm font-medium text-gray-700">溶氧量 (O₂)</label>
+                                <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden shadow-inner">
+                                    <div id="oxygen-bar" class="progress-bar-fill bg-blue-500 h-4 rounded-full" style="width: 70%;"></div>
+                                </div>
+                            </div>
+                            <!-- pH值 -->
+                            <div class="gauge">
+                                <label class="text-sm font-medium text-gray-700">pH值 (酸鹼度) <span id="ph-value">7.0</span></label>
+                                <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden shadow-inner">
+                                    <div id="ph-bar" class="progress-bar-fill bg-purple-500 h-4 rounded-full" style="width: 50%;"></div>
+                                </div>
+                            </div>
+                            <!-- 毒素 -->
+                            <div class="gauge">
+                                <label class="text-sm font-medium text-gray-700">毒素: <span id="toxin-value">10</span>%</label>
+                                <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden shadow-inner">
+                                    <div id="toxin-bar" class="progress-bar-fill bg-green-600 h-4 rounded-full" style="width: 10%;"></div>
+                                </div>
+                            </div>
+                            <!-- 藻類密度 -->
+                            <div class="gauge">
+                                <label class="text-sm font-medium text-gray-700">藻類密度</label>
+                                <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden shadow-inner">
+                                    <div id="algae-bar" class="progress-bar-fill bg-green-500 h-4 rounded-full" style="width: 30%;"></div>
+                                </div>
+                            </div>
+                            <!-- 水溫 -->
+                            <div class="gauge">
+                                <label class="text-sm font-medium text-gray-700">水溫: <span id="temp-value">25</span>°C</label>
+                                <input id="temp-slider" type="range" min="10" max="35" value="25" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. 生物狀態 -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-3">生物狀態</h3>
+                        <div class="space-y-4">
+                            <!-- 羅非魚 -->
+                            <div class="bg-white p-3 rounded-lg shadow">
+                                <span class="font-bold">🐠 羅非魚 (x<span id="fish-count">2</span>)</span> <!-- (修改) 增加數量顯示 -->
+                                <div class="text-sm mt-2">
+                                    <label class="font-medium">健康: <span id="fish-health-value">100</span>%</label>
+                                    <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner mt-1">
+                                        <div id="fish-health-bar" class="progress-bar-fill h-3 rounded-full bg-green-500" style="width: 100%;"></div>
+                                    </div>
+                                </div>
+                                <div class="text-sm mt-2">
+                                    <label class="font-medium">飽食度: <span id="fish-hunger-value">100</span>%</label>
+                                    <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner mt-1">
+                                        <div id="fish-hunger-bar" class="progress-bar-fill h-3 rounded-full bg-blue-500" style="width: 100%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- 三角帆蚌 -->
+                            <div class="bg-white p-3 rounded-lg shadow">
+                                <span class="font-bold">🦪 三角帆蚌 (x<span id="mussel-count">2</span>)</span> <!-- (修改) 增加數量顯示 -->
+                                <div class="text-sm mt-2">
+                                    <label class="font-medium">健康: <span id="mussel-health-value">100</span>%</label>
+                                    <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner mt-1">
+                                        <div id="mussel-health-bar" class="progress-bar-fill h-3 rounded-full bg-green-500" style="width: 100%;"></div>
+                                    </div>
+                                </div>
+                                <div class="text-sm mt-2">
+                                    <label class="font-medium">飽食度: <span id="mussel-hunger-value">100</span>%</label>
+                                    <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner mt-1">
+                                        <div id="mussel-hunger-bar" class="progress-bar-fill h-3 rounded-full bg-blue-500" style="width: 100%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- 右側欄 (行動 + 日誌) -->
+            <aside class="w-full lg:w-1/3 bg-gray-100 p-6 border-l border-gray-200">
+                <!-- 3. 玩家行動 -->
+                <h3 class="text-lg font-semibold mb-3">玩家行動</h3>
+                <div class="grid grid-cols-2 gap-3">
+                    <button id="feed-fish-btn" class="action-btn bg-blue-600 text-white p-3 rounded-lg shadow hover:bg-blue-700 transition duration-200">
+                        餵食羅非魚
+                    </button>
+                    <button id="add-algae-btn" class="action-btn bg-green-600 text-white p-3 rounded-lg shadow hover:bg-green-700 transition duration-200">
+                        投放藻類
+                    </button>
+                    <button id="add-plant-btn" class="action-btn bg-teal-600 text-white p-3 rounded-lg shadow hover:bg-teal-700 transition duration-200">
+                        種植水草
+                    </button>
+                    <button id="add-limewater-btn" class="action-btn bg-indigo-500 text-white p-3 rounded-lg shadow hover:bg-indigo-600 transition duration-200">
+                        加入石灰水
+                    </button>
+                    <button id="clean-tank-btn" class="action-btn bg-purple-600 text-white p-3 rounded-lg shadow hover:bg-purple-700 transition duration-200">
+                        清潔水缸
+                    </button>
+                    <button id="emergency-water-change-btn" class="action-btn text-white p-3 rounded-lg shadow transition duration-200" disabled>
+                        緊急換水
+                    </button>
+                    <button id="start-game-btn" class="action-btn bg-green-600 text-white p-3 rounded-lg shadow hover:bg-green-700 transition duration-200 col-span-1">
+                        開始遊戲
+                    </button>
+                    <button id="reset-game-btn" class="action-btn bg-orange-500 text-white p-3 rounded-lg shadow hover:bg-orange-600 transition duration-200 col-span-1" disabled>
+                        重新開始
+                    </button>
+                </div>
+
+                <!-- 4. 事件日誌 -->
+                <h3 class="text-lg font-semibold mt-6 mb-3">事件日誌</h3>
+                <div id="event-log-container" class="h-56 bg-gray-200 rounded-lg p-2 overflow-y-auto text-sm border border-gray-300"> <!-- (修改) h-80 -> h-56 -->
+                    <!-- JS 會在這裡添加日誌 -->
+                </div>
+
+                <!-- (新增) 5. 遊戲規則提醒 -->
+                <div class="mt-4 bg-yellow-100 border border-yellow-300 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold mb-3 text-yellow-800">遊戲技巧提醒</h3>
+                    <div class="space-y-1 text-sm text-gray-700">
+                        <p><strong>理想生境:</strong></p>
+                        <ul class="list-disc list-inside pl-2">
+                            <li>1) 維持高溶氧度</li>
+                            <li>2) pH值維持 7-8</li>
+                            <li>3) 毒素維持低水平</li>
+                        </ul>
+                        <p class="pt-2"><strong>操作技巧:</strong></p>
+                        <ul class="list-disc list-inside pl-2">
+                            <li>1) 投放藻類及餵食羅非魚有助維持生物的飽食度</li>
+                            <li>2) 飽食度影響生物的健康值</li>
+                            <li>3) 種植水草增加溶氧量</li>
+                            <li>4) 水質會隨時間變酸，加入石灰水增加pH</li>
+                            <li>5) 清潔水缸可除去毒素</li>
+                        </ul>
+                    </div>
+                </div>
+
+            </aside>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM 元素 ---
+        const gameDayEl = document.getElementById('game-day');
+        // 環境
+        const oxygenBar = document.getElementById('oxygen-bar');
+        const phBar = document.getElementById('ph-bar');
+        const phValue = document.getElementById('ph-value');
+        const toxinBar = document.getElementById('toxin-bar');
+        const toxinValue = document.getElementById('toxin-value');
+        const algaeBar = document.getElementById('algae-bar');
+        const tempValue = document.getElementById('temp-value');
+        const tempSlider = document.getElementById('temp-slider');
+        const waterTurbidity = document.getElementById('water-turbidity');
+        const startGameBtn = document.getElementById('start-game-btn');
+        // 生物
+        const fishHealthValue = document.getElementById('fish-health-value');
+        const fishHealthBar = document.getElementById('fish-health-bar');
+        const fishHungerValue = document.getElementById('fish-hunger-value');
+        const fishHungerBar = document.getElementById('fish-hunger-bar');
+        const musselHealthValue = document.getElementById('mussel-health-value');
+        const musselHealthBar = document.getElementById('mussel-health-bar');
+        const musselHungerValue = document.getElementById('mussel-hunger-value');
+        const musselHungerBar = document.getElementById('mussel-hunger-bar');
+        
+        const fishEl = document.getElementById('fish'); // (保留) 為了 moveFish 的 querySelector
+        const musselEl = document.getElementById('mussel'); // (保留)
+        const plantContainer = document.getElementById('plant-container');
+        const bubbleContainer = document.getElementById('bubble-container');
+        // 按鈕
+        const feedFishBtn = document.getElementById('feed-fish-btn');
+        const addAlgaeBtn = document.getElementById('add-algae-btn');
+        const addPlantBtn = document.getElementById('add-plant-btn');
+        const addLimewaterBtn = document.getElementById('add-limewater-btn');
+        const cleanTankBtn = document.getElementById('clean-tank-btn');
+        const waterChangeBtn = document.getElementById('emergency-water-change-btn');
+        const resetGameBtn = document.getElementById('reset-game-btn');
+        // 訊息
+        const messageBox = document.getElementById('message-box');
+        const messageText = document.getElementById('message-text');
+        // 測驗
+        const quizModal = document.getElementById('quiz-modal');
+        const quizTitle = document.getElementById('quiz-title');
+        const quizQuestion = document.getElementById('quiz-question');
+        const quizAns1 = document.getElementById('quiz-ans-1');
+        const quizAns2 = document.getElementById('quiz-ans-2');
+        const quizCancel = document.getElementById('quiz-cancel');
+        const quizOptions = document.querySelectorAll('.quiz-option');
+        // 日誌
+        const eventLogContainer = document.getElementById('event-log-container');
+        // (新增) 成績版面
+        const scoreModal = document.getElementById('score-modal');
+        const scoreDay = document.getElementById('score-day');
+        const scoreTitle = document.getElementById('score-title');
+        const scoreCloseBtn = document.getElementById('score-close-btn');
+
+        // --- 遊戲狀態 (GameState) ---
+        let gameState = {
+            day: 1,
+            light: true, // true = 白天, false = 夜晚
+            // 環境參數
+            oxygen: 70,    // 0-100
+            ph: 7.0,       // 0-14
+            toxin: 10,     // 0-100
+            algae: 30,     // 0-100
+            temp: 25,
+            plantCount: 2,
+            // (新增) 生物數量
+            fishCount: 2,
+            musselCount: 2,
+            // 蚌的計時器
+            musselAlgaeLowDuration: 0, // (Req 2)
+            musselHungerLowDuration: 0, // (Req 3)
+            // (新增) 魚的計時器
+            fishAlgaeLowDuration: 0,
+            fishHungerLowDuration: 0,
+            // 生物參數
+            fish: {
+                health: 100,
+                hunger: 100,
+            },
+            mussel: {
+                health: 100,
+                hunger: 100,
+            },
+            gameOver: true, // (補全) 遊戲開始時應為 true，直到按下 "開始遊戲"
+            gameStarted: false // (補全) 追蹤遊戲是否已開始
+        };
+
+        let gameLoop; // 遊戲循環
+        let pendingAction = null; // 儲存待執行的動作
+        let currentQuiz = null; // 儲存目前的測驗
+        let gameTicks = 0;
+        let isWaterChangeOnCooldown = false; // (新增) 緊急換水冷卻
+        const initialGameState = JSON.parse(JSON.stringify(gameState)); // 儲存初始狀態
+
+        // --- 測驗資料庫 ---
+        const quizDatabase = {
+            easy: [
+                { q: "三角帆蚌的主要食物是什麼？", a1: "藻類", a2: "魚糧", correct: 1, hint: "學習目標 1：三角帆蚌過濾水中藻類為食物" },
+                { q: "什麼生物可以增加水中的溶解氧？", a1: "羅非魚", a2: "水草", correct: 2, hint: "學習目標 4：種植水草可增加水中溶解氧" },
+                { q: "餵食羅非魚有什麼好處？", a1: "減少牠吃藻類", a2: "增加蚌的食物", correct: 1, hint: "學習目標 2：餵食魚糧可減少（與蚌的）競爭" },
+                { q: "當水質變酸 (pH值降低) 時，應加入什麼來調節？", a1: "石灰水", a2: "更多藻類", correct: 1, hint: "石灰水是鹼性的，可以中和酸性。" },
+                { q: "魚的排泄物會對水質造成什麼影響？", a1: "增加毒素", a2: "增加溶解氧", correct: 1, hint: "學習目標 3：排泄物會增加毒素" },
+            ],
+            hard: [
+                { q: "如果藻類爆發 (太多藻類) 並且在晚上，溶解氧會發生什麼？", a1: "大幅增加", a2: "大幅減少", correct: 2, hint: "藻類在晚上和魚一樣，只會呼吸消耗氧氣。" },
+                { q: "羅非魚和三角帆蚌之間存在什麼關係？", a1: "競爭關係 (搶藻類)", a2: "共生關係 (互相幫助)", correct: 1, hint: "學習目標 2：牠們都會消耗藻類。" },
+                { q: "魚的排泄物和殘餌會使水質...", a1: "變酸 (pH降低)", a2: "變鹼 (pH增加)", correct: 1, hint: "學習目標 3：分解過程會產生酸性物質。" },
+            ]
+        };
+
+
+        // --- 遊戲功能 ---
+
+        /**
+         * (補全) 顯示訊息 (彈窗)
+         * @param {string} msg - 要顯示的訊息
+         * @param {string} type - 'info' (黃) 或 'error' (紅) 或 'system' (藍)
+         */
+        function showMessage(msg, type = 'info') {
+            messageText.innerText = msg;
+            messageBox.classList.remove('bg-yellow-400', 'bg-red-500', 'text-white', 'bg-blue-500', 'text-gray-900');
+            
+            if (type === 'error') {
+                messageBox.classList.add('bg-red-500', 'text-white');
+            } else if (type === 'system') {
+                 messageBox.classList.add('bg-blue-500', 'text-white');
+            } else {
+                messageBox.classList.add('bg-yellow-400', 'text-gray-900');
+            }
+            
+            messageBox.style.opacity = 1;
+            messageBox.style.transform = 'translate(-50%, 0)';
+
+            setTimeout(() => {
+                messageBox.style.opacity = 0;
+                messageBox.style.transform = 'translate(-50%, -10px)';
+            }, 3000);
+        }
+
+        /**
+         * (補全) 記錄事件到日誌
+         * @param {string} msg - 要記錄的訊息
+         * @param {string} type - 'info' (黃), 'error' (紅), 'log' (藍), 'system' (灰)
+         */
+        function logEvent(msg, type = 'info') {
+            const logEntry = document.createElement('p');
+            let color = 'text-gray-700'; // default
+            
+            if (type === 'error') {
+                color = 'text-red-600 font-bold';
+            } else if (type === 'info') {
+                color = 'text-yellow-800';
+            } else if (type === 'log') {
+                color = 'text-blue-700';
+            } else if (type === 'system') {
+                color = 'text-gray-500 italic';
+            }
+            
+            // (修復) 確保在 gameState.day 可用時才使用
+            const dayText = (gameState && typeof gameState.day !== 'undefined') ? `[第${gameState.day}天] ` : '';
+            logEntry.className = `py-0.5 ${color}`;
+            logEntry.innerText = `${dayText}${msg}`;
+            
+            if (eventLogContainer) {
+                eventLogContainer.appendChild(logEntry);
+                eventLogContainer.scrollTop = eventLogContainer.scrollHeight;
+            } else {
+                console.error("eventLogContainer not found, log:", msg);
+            }
+        }
+
+        /**
+         * (補全) 限制數值
+         * @param {number} value - 數值
+         * @returns {number} 
+         */
+        function clamp(value, min = 0, max = 100) {
+            const val = parseFloat(value);
+            if (isNaN(val)) return min;
+            return Math.max(min, Math.min(max, val));
+        }
+
+        /**
+         * (補全) 顯示測驗
+         * @param {string} difficulty - 'easy' 或 'hard'
+         * @param {string} actionName - 答對後要執行的動作
+         */
+        function showQuiz(difficulty, actionName) {
+            if (gameState.gameOver) return;
+            
+            pendingAction = actionName;
+            const questionPool = quizDatabase[difficulty];
+            currentQuiz = questionPool[Math.floor(Math.random() * questionPool.length)];
+
+            quizTitle.innerText = (difficulty === 'hard') ? "高難度生態問題" : "生態問題";
+            quizQuestion.innerText = currentQuiz.q;
+            quizAns1.innerText = currentQuiz.a1;
+            quizAns2.innerText = currentQuiz.a2;
+
+            quizModal.classList.remove('hidden');
+        }
+
+        /** (補全) 隱藏測驗 */
+        function hideQuiz() {
+            quizModal.classList.add('hidden');
+            pendingAction = null;
+            currentQuiz = null;
+        }
+
+        /** (補全) 處理測驗答案 */
+        function handleQuizAnswer(answerIndex) {
+            if (!currentQuiz) return;
+
+            if (answerIndex === currentQuiz.correct) {
+                showMessage("答對了！執行操作。", "info");
+                // 答對了，執行待定動作
+                switch (pendingAction) {
+                    case 'feedFish':
+                        logic_feedFish();
+                        break;
+                    case 'addAlgae':
+                        logic_addAlgae();
+                        break;
+                    case 'addPlant':
+                        logic_addPlant();
+                        break;
+                    case 'addLimewater':
+                        logic_addLimewater();
+                        break;
+                    case 'cleanTank':
+                        logic_cleanTank();
+                        break;
+                    case 'waterChange':
+                        logic_waterChange();
+                        break;
+                }
+            } else {
+                const correctText = (currentQuiz.correct === 1) ? currentQuiz.a1 : currentQuiz.a2;
+                showMessage(`答錯了！正確答案是: ${correctText}`, "error");
+                logEvent(`測驗提示：${currentQuiz.hint}`, "system");
+            }
+            hideQuiz();
+        }
+
+
+        /**
+         * (新增) 嘗試執行一個動作，有 20% 機率需要答題
+         * @param {string} difficulty - 'easy' 或 'hard'
+         * @param {string} actionName - 動作的名稱 (e.g., 'feedFish')
+         */
+        function attemptAction(difficulty, actionName) {
+            if (gameState.gameOver) return; // 遊戲結束時不能執行動作
+
+            if (Math.random() < 0.2) { // (修改) 40% -> 20%
+                // 20% 機率，顯示測驗
+                logEvent("本次操作需要回答問題...", "system");
+                showQuiz(difficulty, actionName);
+            } else {
+                // 80% 機率，直接執行
+                showMessage("操作成功！(本次免答題)", "info");
+                
+                // 立即執行動作
+                switch (actionName) {
+                    case 'feedFish':
+                        logic_feedFish();
+                        break;
+                    case 'addAlgae':
+                        logic_addAlgae();
+                        break;
+                    case 'addPlant':
+                        logic_addPlant();
+                        break;
+                    case 'addLimewater':
+                        logic_addLimewater();
+                        break;
+                    case 'cleanTank':
+                        logic_cleanTank();
+                        break;
+                    case 'waterChange':
+                        logic_waterChange();
+                        break;
+                }
+            }
+        }
+
+
+        /**
+         * 重新繪製所有水草
+         */
+        function redrawPlants() {
+            plantContainer.innerHTML = ""; // 清除現有的水草
+            let baseLeft = 70; // 從右側 70% 開始
+            let plantSpacing = 5; // 水草間距
+            for (let i = 0; i < gameState.plantCount; i++) {
+                const newPlant = document.createElement('span');
+                newPlant.className = 'absolute text-6xl'; // (修改) text-4xl -> text-6xl
+                newPlant.innerText = '🌿';
+                
+                let leftPos = baseLeft - (i * plantSpacing);
+                let bottomPos = 10;
+
+                if (i >= 10) {
+                    leftPos = baseLeft - ((i - 10) * plantSpacing);
+                    bottomPos = 30; // 第二行
+                }
+                
+                newPlant.style.left = `${leftPos}%`;
+                newPlant.style.bottom = `${bottomPos}px`;
+                plantContainer.appendChild(newPlant);
+            }
+        }
+
+
+        /**
+         * 更新UI
+         */
+        function updateUI() {
+            const state = gameState;
+            
+            gameDayEl.innerText = `第 ${state.day} 天 (${state.light ? '白天' : '夜晚'})`;
+            
+            oxygenBar.style.width = `${state.oxygen}%`;
+            
+            phValue.innerText = state.ph.toFixed(1);
+            phBar.style.width = `${(state.ph / 14) * 100}%`;
+            let phColor = 'bg-purple-500'; 
+            if (state.ph < 6.5 || state.ph > 7.5) phColor = 'bg-yellow-500';
+            if (state.ph < 6.0 || state.ph > 8.0) phColor = 'bg-red-500';
+            phBar.className = `progress-bar-fill h-4 rounded-full ${phColor}`;
+
+            const toxinPercent = clamp(state.toxin, 0, 100);
+            toxinBar.style.width = `${toxinPercent}%`;
+            toxinValue.innerText = Math.round(toxinPercent); 
+
+            toxinBar.classList.remove('bg-red-600', 'bg-yellow-500', 'bg-green-600');
+            if (toxinPercent > 80) {
+                toxinBar.classList.add('bg-red-600');
+            } else if (toxinPercent > 50) {
+                toxinBar.classList.add('bg-yellow-500');
+            } else {
+                toxinBar.classList.add('bg-green-600');
+            }
+
+            algaeBar.style.width = `${state.algae}%`;
+            waterTurbidity.style.opacity = (state.algae / 100) * 0.7;
+
+            // (補全) 生物狀態
+            const fishHealth = Math.round(state.fish.health);
+            fishHealthValue.innerText = fishHealth;
+            fishHealthBar.style.width = `${fishHealth}%`;
+            fishHealthBar.classList.remove('bg-green-500', 'bg-yellow-500', 'bg-red-500');
+            if (fishHealth < 30) {
+                fishHealthBar.classList.add('bg-red-500');
+            } else if (fishHealth < 60) {
+                fishHealthBar.classList.add('bg-yellow-500');
+            } else {
+                fishHealthBar.classList.add('bg-green-500');
+            }
+
+            const fishHunger = Math.round(state.fish.hunger);
+            fishHungerValue.innerText = fishHunger;
+            fishHungerBar.style.width = `${fishHunger}%`;
+
+            const musselHealth = Math.round(state.mussel.health);
+            musselHealthValue.innerText = musselHealth;
+            musselHealthBar.style.width = `${musselHealth}%`;
+            musselHealthBar.classList.remove('bg-green-500', 'bg-yellow-500', 'bg-red-500');
+            if (musselHealth < 30) {
+                musselHealthBar.classList.add('bg-red-500');
+            } else if (musselHealth < 60) {
+                musselHealthBar.classList.add('bg-yellow-500');
+            } else {
+                musselHealthBar.classList.add('bg-green-500');
+            }
+
+            const musselHunger = Math.round(state.mussel.hunger);
+            musselHungerValue.innerText = musselHunger;
+            musselHungerBar.style.width = `${musselHunger}%`;
+
+            // (補全) 啟用/禁用緊急換水
+            // (修改) 移除舊的自動禁用邏輯。現在只由冷卻和遊戲狀態(startGame/endGame)控制。
+            // waterChangeBtn.disabled = (state.toxin <= 80 && state.oxygen >= 10); 
+
+        }
+
+        // --- (補全) 玩家行動邏輯 (Player Action Logic) ---
+
+        function logic_feedFish() {
+            gameState.fish.hunger = clamp(gameState.fish.hunger + 10, 0, 100); // (修改 Req 3) 40 -> 10
+            gameState.toxin = clamp(gameState.toxin + (5 * gameState.fishCount), 0, 100); // (修改) 殘餌 * 魚數量
+            logEvent(`你餵食了羅非魚(x${gameState.fishCount})，飽食度 +10%。`, "log"); // (修改) 更新日誌
+        }
+
+        function logic_addAlgae() {
+            gameState.algae = clamp(gameState.algae + 30, 0, 100);
+            logEvent("你投放了藻類。 (學習目標 1)", "log");
+        }
+
+        function logic_addPlant() {
+            if (gameState.plantCount >= 15) {
+                showMessage("水草太多，種不下了！", "info");
+                return;
+            }
+            gameState.plantCount++;
+            // (用戶要求) 種植水草時，立即增加溶氧量
+            gameState.oxygen = clamp(gameState.oxygen + 30, 0, 100);
+            redrawPlants();
+            logEvent("你種植了一棵水草，溶氧量增加了！ (學習目標 4)", "log");
+        }
+
+        function logic_addLimewater() {
+            gameState.ph = clamp(gameState.ph + 1.5, 0, 14); // 強力中和
+            logEvent("你加入了石灰水來中和酸性。", "log");
+        }
+
+        function logic_cleanTank() {
+            gameState.toxin = clamp(gameState.toxin - 40, 0, 100);
+            gameState.algae = clamp(gameState.algae - 20, 0, 100); // 清理時也會移除一些藻類
+            logEvent("你清潔了水缸，毒素降低了。", "log");
+        }
+
+        function logic_waterChange() {
+            // (修改) 檢查是否需要執行
+            if (gameState.toxin <= 80 && gameState.oxygen >= 10) {
+                showMessage("水質尚未達到危急標準，無需換水。", "info");
+                // (重要) 雖然無需換水，但因為玩家通過了測驗，我們仍然觸發冷卻
+            } else {
+                gameState.toxin = clamp(gameState.toxin - 70, 0, 100);
+                gameState.oxygen = clamp(gameState.oxygen + 50, 0, 100);
+                gameState.ph = 7.0; // 換水重置pH
+                logEvent("緊急換水！水質暫時穩定下來。", "error");
+            }
+
+            // (新增) 觸發10秒冷卻
+            isWaterChangeOnCooldown = true;
+            waterChangeBtn.disabled = true;
+            logEvent("緊急換水進入10秒冷卻...", "system");
+
+            setTimeout(() => {
+                isWaterChangeOnCooldown = false;
+                if (!gameState.gameOver) {
+                    waterChangeBtn.disabled = false;
+                }
+                logEvent("緊急換水已準備就緒。", "system");
+            }, 10000); // 10秒
+        }
+
+        // --- (補全) 遊戲主循環 (Game Loop) ---
+
+        /**
+         * 主要遊戲更新循環 (Game Loop)
+         */
+        function updateGame() {
+            if (gameState.gameOver) return;
+
+            const state = gameState;
+            const optimalTemp = (state.temp >= 15 && state.temp <= 30);
+            
+            // --- 0. 自然變化 ---
+            state.ph = clamp(state.ph - 0.02, 0, 14); 
+            state.algae = clamp(state.algae - 0.1, 0, 100);
+
+            // --- 1. 消耗/產生 ---
+            
+            // 羅非魚
+            state.fish.hunger = clamp(state.fish.hunger - 2, 0, 100); // (修改 Req 1) 1 -> 2
+            let phDrop = 0.05; 
+            if (state.toxin > 50) phDrop += 0.05;
+            if (state.toxin > 80) phDrop += 0.05;
+            state.ph = clamp(state.ph - (phDrop * state.fishCount), 0, 14); // (修改) 變酸 * 魚數量
+
+            state.toxin = clamp(state.toxin + (0.2 * state.fishCount), 0, 100); // (修改) 毒素 * 魚數量
+            state.oxygen = clamp(state.oxygen - (1.5 * state.fishCount), 0, 100); // (修改) 耗氧 * 魚數量
+            
+            if (state.fish.hunger < 30 && state.algae > 10) {
+                state.algae = clamp(state.algae - (5 * state.fishCount), 0, 100); // (修改) 吃藻 * 魚數量
+                state.fish.hunger = clamp(state.fish.hunger + 10, 0, 100);
+            }
+
+            // 三角帆蚌
+            state.mussel.hunger = clamp(state.mussel.hunger - 2, 0, 100); // (修改 Req 1) 每秒都更餓 (1 -> 2)
+            if (state.algae > 10) {
+                let algaeEaten = Math.min(state.algae, 2); // (這是 per mussel)
+                if (optimalTemp) {
+                    state.algae = clamp(state.algae - (algaeEaten * state.musselCount), 0, 100); // (修改) 總共吃掉的藻類
+                    state.mussel.hunger = clamp(state.mussel.hunger + algaeEaten * 5, 0, 100); // (不變) 飢餓度是 group-based
+                }
+            }
+            state.oxygen = clamp(state.oxygen - (1 * state.musselCount), 0, 100); // (修改) 耗氧 * 蚌數量
+
+            // --- 1.5. 植物腐爛 ---
+            if (gameTicks > 0 && gameTicks % 2 === 0 && state.plantCount > 0) { 
+                let plantsToDie = Math.ceil(state.plantCount * 0.2); 
+                state.plantCount = Math.max(0, state.plantCount - plantsToDie);
+                
+                state.oxygen = clamp(state.oxygen - 20, 0, 100);
+                state.toxin = clamp(state.toxin + 10, 0, 100); 
+                state.ph = clamp(state.ph - 0.5, 0, 14); 
+
+                redrawPlants(); 
+                logEvent(`有 ${plantsToDie} 棵水草腐爛了！水質惡化！`, "error"); 
+            }
+
+
+            // --- 2. 核心溶氧邏輯 ---
+            if (state.plantCount > 0 && state.light) {
+                state.oxygen = clamp(state.oxygen * 1.05, 0, 100);
+            } else if (state.plantCount === 0) {
+                state.oxygen = clamp(state.oxygen * 0.95, 0, 100);
+            }
+
+            if (state.light && state.algae > 10) {
+                 state.oxygen = clamp(state.oxygen + (state.algae / 10), 0, 100);
+            }
+            
+            if (!state.light) {
+                state.oxygen = clamp(state.oxygen - (state.algae / 10), 0, 100);
+                state.oxygen = clamp(state.oxygen - (state.plantCount * 0.5), 0, 100);
+            }
+
+            // --- 3. 健康檢查 (Health Checks) ---
+            
+            // (補全) 建立一個標記，看本-tick-是否扣血
+            let fishTookDamage = false;
+
+            // --- (用戶要求) 新增 魚的飢餓/健康 邏輯 (Req 2 & 4) ---
+            
+            // (Req 2) 當藻類密度低於50%每維持2tick，魚的飽食度減少10%
+            if (state.algae < 50) {
+                state.fishAlgaeLowDuration++;
+                if (state.fishAlgaeLowDuration > 0 && state.fishAlgaeLowDuration % 2 === 0) {
+                    state.fish.hunger = clamp(state.fish.hunger - 10, 0, 100);
+                    logEvent("警告：藻類密度低於 50%，羅非魚飽食度下降！", "info");
+                }
+            } else {
+                state.fishAlgaeLowDuration = 0; // 藻類充足，重置
+            }
+
+            // (Req 4) 當飽食度低於50%維持每維持2tick，魚的健康值減少10%
+            if (state.fish.hunger < 50) {
+                state.fishHungerLowDuration++;
+                if (state.fishHungerLowDuration > 0 && state.fishHungerLowDuration % 2 === 0) {
+                    state.fish.health = clamp(state.fish.health - 10, 0, 100);
+                    fishTookDamage = true; // (重要) 標記扣血
+                    logEvent("警告：羅非魚飢餓過久，健康下降 10%！", "error");
+                }
+            } else {
+                state.fishHungerLowDuration = 0; // 飽食度充足，重置
+            }
+            // --- 結束 (Req 2 & 4) ---
+
+
+            // 魚
+            if (state.fish.hunger <= 0) {
+                state.fish.health = clamp(state.fish.health - 5, 0, 100); // 餓到扣血 (保留)
+                fishTookDamage = true;
+            }
+            
+            // --- (用戶要求) 新的嚴格健康檢查 ---
+            // (修改) 調整懲罰閾值
+            if (state.oxygen < 10) { // (原 < 30)
+                state.fish.health = clamp(state.fish.health - 10, 0, 100); // 缺氧
+            }
+            if (state.toxin > 50) { // (原 > 30)
+                state.fish.health = clamp(state.fish.health - 10, 0, 100); // 中毒
+            }
+            if (state.ph < 6.0) { // (原 < 6.9)
+                state.fish.health = clamp(state.fish.health - 10, 0, 100); // pH不適
+                fishTookDamage = true;
+            }
+            // (備註：保留原有的 high-pH 檢查，因為用戶只提到 "低於")
+            if (state.ph > 8.0) {
+                 state.fish.health = clamp(state.fish.health - 3, 0, 100); // (保留) pH過高
+                 fishTookDamage = true;
+            }
+            // --- 結束 ---
+
+            // --- (用戶要求) 新增健康恢復 ---
+            if (!fishTookDamage) {
+                // 如果本-tick-沒有扣血，檢查恢復條件
+                const isWellFed = state.fish.hunger > 60;
+                const isCleanWater = state.toxin < 30;
+                const isGoodPh = (state.ph >= 7.0 && state.ph <= 8.0);
+
+                if (isWellFed || isCleanWater || isGoodPh) {
+                    // 只要滿足任一條件，就恢復健康
+                    state.fish.health = clamp(state.fish.health + 5, 0, 100); // (修改) 每-tick-恢復 5%
+                }
+            }
+            // --- 結束 ---
+            
+            // 蚌
+            let musselTookDamage = false; // (新增)
+
+            // --- (用戶要求) 移除舊的藻類過低懲罰 ---
+            /*
+            if (state.algae < 30) {
+                state.algaeLowDuration++; // 累積計數
+                // 每維持 2 ticks，就扣一次
+                if (state.algaeLowDuration > 0 && state.algaeLowDuration % 2 === 0) {
+                    state.mussel.health = clamp(state.mussel.health - 30, 0, 100);
+                    musselTookDamage = true;
+                    logEvent("警告：藻類密度過低已久，三角帆蚌健康大幅下降 30%！", "error");
+                }
+            } else {
+                state.algaeLowDuration = 0; // 藻類充足，重置計數器
+            }
+            */
+            // --- 結束 (移除) ---
+
+            // --- (用戶要求) 新增 蚌的飢餓/健康 邏輯 (Req 2 & 3) ---
+            
+            // (Req 2) 當藻類密度低於50%每維持2tick，蚌的飽食度減少10%
+            if (state.algae < 50) {
+                state.musselAlgaeLowDuration++;
+                if (state.musselAlgaeLowDuration > 0 && state.musselAlgaeLowDuration % 2 === 0) {
+                    state.mussel.hunger = clamp(state.mussel.hunger - 10, 0, 100);
+                    logEvent("警告：藻類密度低於 50%，三角帆蚌飽食度下降！", "info");
+                }
+            } else {
+                state.musselAlgaeLowDuration = 0; // 藻類充足，重置
+            }
+
+            // (Req 3) 當飽食度低於50%維持每維持2tick，蚌的健康值減少10%
+            if (state.mussel.hunger < 50) {
+                state.musselHungerLowDuration++;
+                if (state.musselHungerLowDuration > 0 && state.musselHungerLowDuration % 2 === 0) {
+                    state.mussel.health = clamp(state.mussel.health - 10, 0, 100);
+                    musselTookDamage = true;
+                    logEvent("警告：三角帆蚌飢餓過久，健康下降 10%！", "error");
+                }
+            } else {
+                state.musselHungerLowDuration = 0; // 飽食度充足，重置
+            }
+            // --- 結束 (Req 2 & 3) ---
+
+
+            if (state.mussel.hunger <= 0) {
+                state.mussel.health = clamp(state.mussel.health - 5, 0, 100); // 餓到扣血 (保留)
+                musselTookDamage = true; // (新增)
+            }
+            if (!optimalTemp) {
+                state.mussel.health = clamp(state.mussel.health - 3, 0, 100); // 溫度不適 (保留)
+                musselTookDamage = true; // (新增)
+            }
+
+            // --- (用戶要求) 新的嚴格健康檢查 ---
+            // (修改) 調整懲罰閾值
+            if (state.oxygen < 10) { // (原 < 30)
+                state.mussel.health = clamp(state.mussel.health - 10, 0, 100); // 缺氧
+                musselTookDamage = true; // (新增)
+            }
+            if (state.toxin > 50) { // (原 > 30)
+                state.mussel.health = clamp(state.mussel.health - 10, 0, 100); // 中毒 (新增)
+                musselTookDamage = true; // (新增)
+            }
+            if (state.ph < 6.0) { // (原 < 6.9)
+                state.mussel.health = clamp(state.mussel.health - 10, 0, 100); // pH不適 (新增)
+                musselTookDamage = true; // (新增)
+            }
+            // --- 結束 ---
+
+            // --- (新增) 蚌的健康恢復 ---
+            if (!musselTookDamage) {
+                const isWellFed = state.mussel.hunger > 60;
+                const isCleanWater = state.toxin < 30;
+                // (optimalTemp 已在函式開頭定義)
+
+                if (isWellFed || isCleanWater || optimalTemp) {
+                    state.mussel.health = clamp(state.mussel.health + 5, 0, 100); // (修改) 每-tick-恢復 5%
+                }
+            }
+            // --- 結束 ---
+
+
+            // --- 4. 狀態日誌 (Status Logging) ---
+            if (gameTicks % 5 === 0) { // 每 5 Ticks 檢查一次
+                if (state.mussel.hunger < 20 && state.mussel.health > 0) logEvent("警告：三角帆蚌快餓死了！(藻類不足)", "info");
+                if (state.fish.hunger < 20 && state.fish.health > 0) logEvent("警告：羅非魚很餓！(快餵牠)", "info");
+                
+                // --- (用戶要求) 更新警告閾值 ---
+                // (修改) 調整警告閾值
+                if (state.oxygen < 10) logEvent("警告：水中溶氧極低！", "error"); // (原 < 30)
+                if (state.toxin > 50) logEvent("警告：毒素嚴重累積！", "error"); // (原 > 30)
+                if (state.ph < 6.0) logEvent("警告：水質嚴重偏酸！", "error"); // (原 < 6.9)
+                // (保留) pH 過高警告
+                if (state.ph > 8.0 && state.fish.health > 0) logEvent("警告：pH值已達危險範圍！(過鹼)", "error");
+            }
+            
+            // --- 5. 遊戲結束檢查 (Game Over Checks) ---
+            // (用戶要求) 氧氣耗盡
+            if (state.oxygen <= 0) {
+                 document.querySelectorAll('.fish').forEach(f => f.innerText = "💀"); // (修改) 
+                 document.getElementById('mussel').innerText = "✖️";
+                 document.getElementById('mussel-2').innerText = "✖️";
+                 endGame("遊戲結束：水中氧氣耗盡，所有生物窒息死亡。");
+                 return; // (重要) 立即停止，防止檢查其他死亡條件
+            }
+
+            if (state.fish.health <= 0) {
+                document.querySelectorAll('.fish').forEach(f => f.innerText = "💀"); // (修改) 
+                endGame("遊戲結束：羅非魚死於水質惡化或飢餓。");
+            }
+            if (state.mussel.health <= 0) {
+                document.getElementById('mussel').innerText = "✖️"; // (修改)
+                document.getElementById('mussel-2').innerText = "✖️";
+                endGame("遊戲結束：三角帆蚌死於水質惡化或飢餓。");
+            }
+
+            // --- 6. 勝利檢查 (補全) ---
+            if (state.day > 30) {
+                endGame("恭喜！你成功維持生態平衡 30 天！你贏了！");
+            }
+
+            // --- 7. 更新UI和計數器 ---
+            gameTicks++;
+            // 每 10 Ticks (20秒) 換一次日夜
+            if (gameTicks % 10 === 0) {
+                gameState.light = !gameState.light;
+                if (gameState.light) {
+                    gameState.day++; // 進入新的一天
+                    logEvent(`--- 第 ${gameState.day} 天開始 ---`, "system");
+                }
+            }
+
+            updateUI(); // 最後更新畫面
+        }
+
+        // --- (補全) 遊戲控制 ---
+
+        /**
+         * 結束遊戲
+         * @param {string} message - 結束訊息
+         */
+        function endGame(message) {
+            if (gameState.gameOver) return; // 防止重複觸發
+            
+            gameState.gameOver = true;
+            clearInterval(gameLoop);
+            logEvent(message, "error");
+            showMessage(message, "error");
+
+            // 禁用所有行動按鈕
+            document.querySelectorAll('.action-btn').forEach(btn => {
+                // 保留 "重新開始" 按鈕的啟用狀態
+                if (btn.id !== 'reset-game-btn' && btn.id !== 'start-game-btn') {
+                     btn.disabled = true;
+                }
+            });
+            
+            // 啟用 "重新開始"
+            resetGameBtn.disabled = false;
+
+            // (新增) 顯示成績版面
+            showScoreboard();
+        }
+
+        /**
+         * (新增) 顯示成績版面
+         */
+        function showScoreboard() {
+            const daysSurvived = gameState.day;
+            let title = "";
+
+            if (daysSurvived <= 2) {
+                title = "Lv1. 見習飼養員";
+            } else if (daysSurvived <= 5) {
+                title = "Lv2. 熟練照護者";
+            } else if (daysSurvived <= 10) {
+                title = "Lv.3 水域守護者";
+            } else if (daysSurvived <= 20) {
+                title = "Lv.4 生態大師";
+            } else {
+                title = "Lv.5 傳奇生態瓶";
+            }
+
+            scoreDay.innerText = `${daysSurvived} 天`;
+            scoreTitle.innerText = title;
+
+            scoreModal.classList.remove('hidden');
+        }
+
+
+        /**
+         * 初始化/重置遊戲
+         */
+        function initGame() {
+            // 停止舊的循環（如果存在）
+            if (gameLoop) clearInterval(gameLoop);
+            
+            // 深度複製初始狀態
+            gameState = JSON.parse(JSON.stringify(initialGameState));
+            gameState.gameOver = true; // (補全) 尚未開始
+            gameState.gameStarted = false;
+            
+            gameTicks = 0;
+            isWaterChangeOnCooldown = false; // (新增) 重置冷卻
+            // gameState.algaeLowDuration = 0; // (舊) 重置藻類計數器 (已移除)
+            gameState.musselAlgaeLowDuration = 0; // (新增) 重置 (Req 2)
+            gameState.musselHungerLowDuration = 0; // (新增) 重置 (Req 3)
+            // (新增) 重置魚的計時器
+            gameState.fishAlgaeLowDuration = 0;
+            gameState.fishHungerLowDuration = 0;
+            
+            // (新增) 隱藏成績版面
+            scoreModal.classList.add('hidden');
+
+            // 重置UI
+            updateUI();
+            redrawPlants();
+            document.querySelectorAll('.fish').forEach(f => f.innerText = "🐠"); // (修改)
+            document.getElementById('mussel').innerText = "🦪"; // (修改)
+            document.getElementById('mussel-2').innerText = "🦪";
+            
+            // 清空日誌
+            eventLogContainer.innerHTML = "";
+            logEvent("歡迎來到掌上生態瓶！", "system");
+            logEvent("你的目標是維持生態平衡 30 天。", "system");
+            
+            // (移除) 顯示遊戲規則 (已移至HTML)
+            /*
+            logEvent("--- 遊戲規則 ---", "system");
+            logEvent("理想生境: 1)維持高溶氧度 2)pH值維持7-8 3)毒素維持低水平", "system");
+            logEvent("--- 操作技巧 ---", "system");
+            logEvent("1) 投放藻類及餵食羅非魚有助維持生物的飽食度", "system");
+            logEvent("2) 飽食度影響生物的健康值", "system");
+            logEvent("3) 種植水草增加溶氧量", "system");
+            logEvent("4) 水質會隨時間變酸，影響生物的健康值，加入石灰水增加pH", "system");
+            logEvent("5) 清潔水缸可除去毒素", "system");
+            logEvent("-----------------", "system");
+            */
+            
+            logEvent("按下 [開始遊戲] 來啟動生態循環。", "system");
+            
+            // 重置按鈕狀態
+            document.querySelectorAll('.action-btn').forEach(btn => btn.disabled = true);
+            startGameBtn.disabled = false;
+        }
+
+        /** (補全) 開始遊戲 */
+        function startGame() {
+            if (gameState.gameStarted) return; // 防止重複開始
+
+            gameState.gameOver = false;
+            gameState.gameStarted = true;
+            
+            // 禁用開始按鈕，啟用其他按鈕
+            startGameBtn.disabled = true;
+            resetGameBtn.disabled = false;
+            feedFishBtn.disabled = false;
+            addAlgaeBtn.disabled = false;
+            addPlantBtn.disabled = false;
+            addLimewaterBtn.disabled = false;
+            cleanTankBtn.disabled = false;
+            // waterChangeBtn 保持禁用，直到條件觸發
+
+            logEvent("--- 遊戲開始！生態循環啟動 ---", "system");
+            
+            // 啟動遊戲循環 (每 4 秒更新一次) (修改: 2000 -> 4000)
+            gameLoop = setInterval(updateGame, 4000);
+        }
+
+        // --- (補全) 額外動畫 ---
+
+        /** 魚的隨機游動 */
+        function moveFish() {
+            if (gameState.gameOver && gameState.gameStarted) return; // 遊戲結束(非初始)時停止游動
+            if (gameState.fish.health <= 0) return; // 死亡時停止
+
+            const aquarium = document.querySelector('.aquarium-bg');
+            const aquariumWidth = aquarium.offsetWidth;
+            const aquariumHeight = aquarium.offsetHeight;
+            
+            // (修改) 讓所有的魚都游動
+            document.querySelectorAll('.fish').forEach(fishEl => {
+                const fishSize = fishEl.offsetWidth; 
+
+                // 隨機新位置 (限制在水缸 80% 的範圍內)
+                const newX = Math.random() * (aquariumWidth - fishSize);
+                const newY = (Math.random() * (aquariumHeight * 0.8)) + (aquariumHeight * 0.1); // 避免太高或太低
+
+                // 檢查方向
+                const currentX = parseFloat(fishEl.style.left.replace('%', '')) / 100 * aquariumWidth || (aquariumWidth / 2);
+                if (newX > currentX) {
+                    fishEl.style.transform = 'scaleX(1)'; // 向右
+                } else {
+                    fishEl.style.transform = 'scaleX(-1)'; // 向左
+                }
+
+                fishEl.style.left = `${(newX / aquariumWidth) * 100}%`;
+                fishEl.style.top = `${(newY / aquariumHeight) * 100}%`;
+            });
+
+            setTimeout(moveFish, 3000 + Math.random() * 2000); // 3-5秒游動一次
+        }
+
+        /** 產生氣泡 */
+        function createBubble() {
+            if (gameState.gameOver) return; // 遊戲結束停止產生
+
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble';
+            
+            // 隨機位置 (在水缸 20% 到 80% 寬度之間)
+            bubble.style.left = `${20 + Math.random() * 60}%`;
+            // 隨機動畫延遲
+            bubble.style.animationDelay = `${Math.random() * 3}s`;
+            // 隨機大小
+            const size = 5 + Math.random() * 10;
+            bubble.style.width = `${size}px`;
+            bubble.style.height = `${size}px`;
+
+            bubbleContainer.appendChild(bubble);
+
+            // 氣泡消失後移除 DOM
+            setTimeout(() => {
+                bubble.remove();
+            }, 3000); // 應與動畫時間匹配
+        }
+
+        // --- 事件監聽器 (Event Listeners) ---
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- 遊戲控制按鈕 ---
+            startGameBtn.addEventListener('click', startGame);
+            resetGameBtn.addEventListener('click', initGame);
+
+            // --- 玩家行動按鈕 (綁定測驗) ---
+            // (修改) 綁定到新的 attemptAction 函式
+            feedFishBtn.addEventListener('click', () => attemptAction('easy', 'feedFish'));
+            addAlgaeBtn.addEventListener('click', () => attemptAction('easy', 'addAlgae'));
+            addPlantBtn.addEventListener('click', () => attemptAction('easy', 'addPlant'));
+            addLimewaterBtn.addEventListener('click', () => attemptAction('easy', 'addLimewater'));
+            cleanTankBtn.addEventListener('click', () => attemptAction('hard', 'cleanTank'));
+            
+            // (修改) 緊急換水按鈕使用獨立邏輯
+            waterChangeBtn.addEventListener('click', () => {
+                if (gameState.gameOver) return;
+                
+                // 1. 檢查冷卻
+                if (isWaterChangeOnCooldown) {
+                    showMessage("緊急換水冷卻中 (10秒)...", "info");
+                    return;
+                }
+                
+                // 2. 必須回答高階問題
+                logEvent("緊急換水需要回答高階問題...", "system");
+                showQuiz('hard', 'waterChange');
+            });
+
+            // --- 測驗彈窗按鈕 ---
+            quizOptions.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    handleQuizAnswer(parseInt(btn.dataset.answer));
+                });
+            });
+            quizCancel.addEventListener('click', hideQuiz);
+
+            // (新增) 成績版面關閉按鈕
+            scoreCloseBtn.addEventListener('click', () => {
+                scoreModal.classList.add('hidden');
+            });
+
+            // --- 環境控制 ---
+            tempSlider.addEventListener('input', (e) => {
+                gameState.temp = parseInt(e.target.value);
+                tempValue.innerText = gameState.temp;
+                
+                // (補全) 溫度警告
+                if (!gameState.gameOver && (gameState.temp < 15 || gameState.temp > 30)) {
+                    showMessage("警告：目前水溫不適合生物生長！", "info");
+                }
+            });
+
+            // --- 初始設置 ---
+            initGame();
+            
+            // (補全) 啟動動畫
+            moveFish();
+            setInterval(createBubble, 1000); // 每秒嘗試產生一個氣泡
+        });
+
+    </script>
+</body>
+</html>
