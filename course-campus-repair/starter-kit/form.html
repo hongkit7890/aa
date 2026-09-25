@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>校園報修表單</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="wrap">
+    <h1>校園報修系統</h1>
+    <p class="lead">請填寫以下資料，我們會盡快處理。</p>
+
+    <!-- 第2堂：action 先用 show.php；第3堂改成 insert.php -->
+    <form action="insert.php" method="post">
+      <label>報修人
+        <input type="text" name="name" required>
+      </label>
+      <label>地點
+        <input type="text" name="location" required>
+      </label>
+      <label>問題描述
+        <textarea name="description" rows="4" required></textarea>
+      </label>
+      <button type="submit">送出報修</button>
+    </form>
+
+    <p><a href="list.php">查看報修列表</a></p>
+  </main>
+</body>
+</html>

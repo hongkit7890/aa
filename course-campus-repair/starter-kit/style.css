@@ -1,0 +1,64 @@
+/* 現成樣式：學生只需改標題文字或主色 --brand */
+:root {
+  --brand: #0f6b5c;
+  --ink: #1a1a1a;
+  --bg: #f4f7f6;
+  --card: #ffffff;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  background: linear-gradient(160deg, #e7f2ef 0%, var(--bg) 45%, #eef1f4 100%);
+  color: var(--ink);
+  min-height: 100vh;
+}
+.wrap {
+  max-width: 640px;
+  margin: 2rem auto;
+  background: var(--card);
+  padding: 1.5rem 1.75rem;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(15, 107, 92, 0.08);
+}
+.wrap.wide { max-width: 960px; }
+h1 { color: var(--brand); margin-top: 0; }
+.lead { color: #4a5568; }
+label { display: block; margin: 0.75rem 0; font-weight: 600; }
+input, textarea, select {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #cfd8d6;
+  border-radius: 8px;
+  font: inherit;
+}
+button {
+  margin-top: 1rem;
+  background: var(--brand);
+  color: #fff;
+  border: 0;
+  padding: 0.65rem 1.2rem;
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+button:hover { filter: brightness(1.05); }
+.big { font-size: 1.35rem; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+  font-size: 0.95rem;
+}
+th, td {
+  border-bottom: 1px solid #e2e8e6;
+  padding: 0.55rem 0.4rem;
+  text-align: left;
+  vertical-align: top;
+}
+th { color: var(--brand); }
+a { color: var(--brand); }
+.filter { margin: 1rem 0; }
